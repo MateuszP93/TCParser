@@ -9,6 +9,9 @@ class App(customtkinter.CTk):
     configFilePath = os.getcwd() + configFileName
     lastDir = r""
     live_template_path = r""
+    flag_print = True
+    flag_fix = True
+    current_file = ""
     WIDTH = 600
     HEIGHT = 700
 
@@ -105,6 +108,15 @@ class App(customtkinter.CTk):
     def select_file(self):
         pass
 
+    def start_parse(self):
+        lines_file = []
+        if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "verify coding"):
+            lines_file = self.validate_verify_coding(lines_file)
+
+        for line_number, current_line in enumerate(lines_file, start=1):
+            pass
+
+
     def GetOptionFromCfg(self, cfg_path, section, option):
         if os.path.isfile(cfg_path):
             with open(cfg_path) as opened_file:
@@ -121,6 +133,27 @@ class App(customtkinter.CTk):
         self.config.set(section, option, value)
         with open(cfg_path, "w") as opened_file:
             self.config.write(opened_file)
+
+    def validate_verify_coding(self, file_data):
+        # VALIDATION OF CODING: EXPECTED UTF-8
+        temp_file_data = []
+        if r"# -*- coding: utf-8 -*-" not in file_data[0]:
+            if self.flag_print:
+                print("File:", self.current_file, "\tIn first line coding utf-8 is missing, expected: # -*- coding: utf-8 -*-")
+            if self.flag_fix:
+                temp_file_data.append("# -*- coding: utf-8 -*-\n")
+        return temp_file_data.append(file_data)
+
+
+
+
+
+
+
+
+
+
+
 
 if __name__ == '__main__':
     app = App()
