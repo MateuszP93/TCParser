@@ -1,13 +1,18 @@
 import customtkinter
 import os
 import configparser
+from tkinter import filedialog
 
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
+
+
 class App(customtkinter.CTk):
     config = configparser.ConfigParser()
     configFileName = "/tc_parser.ini"
     configFilePath = os.getcwd() + configFileName
     lastDir = r""
+    file_to_parse = []
+    temporary_file = []
     live_template_path = r""
     flag_print = True
     flag_fix = True
@@ -36,7 +41,7 @@ class App(customtkinter.CTk):
                "Template updater"]
 
     def __init__(self):
-        self.lastDir= self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "last directory")
+        self.lastDir = self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "last directory")
         self.live_template_path = self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "template directory")
         super().__init__()
         # self.minsize(width=self.WIDTH, height=self.HEIGHT)
@@ -52,13 +57,13 @@ class App(customtkinter.CTk):
         self.header.grid_columnconfigure((0, 1), weight=1)
         self.select_catalog_button = customtkinter.CTkButton(master=self.header,
                                                              text="Select catalog",
-                                                             command=self.select_catalog)
+                                                             command=self.select_catalog_event)
 
         self.select_catalog_button.grid(row=0, column=0, pady=(10, 10), padx=10, sticky="we")
 
         self.select_catalog_button = customtkinter.CTkButton(master=self.header,
                                                              text="Select file",
-                                                             command=self.select_file)
+                                                             command=self.select_file_event)
         self.select_catalog_button.grid(row=0, column=1, pady=(10, 10), padx=10, sticky="we")
 
         # ====================== header settings ======================
@@ -81,7 +86,6 @@ class App(customtkinter.CTk):
             checkbox.select() if int(self.GetOptionFromCfg(self.configFilePath, section="DEFAULT", option=option_name)) else checkbox.deselect()
             self.checkbox_dict.update({option_name: checkbox})
 
-
         # ====================== footer section settings ======================
 
         self.footer_grid = customtkinter.CTkFrame(master=self)
@@ -89,11 +93,11 @@ class App(customtkinter.CTk):
         self.footer_grid.grid_columnconfigure(0, weight=1)
         self.select_catalog_button = customtkinter.CTkButton(master=self.footer_grid,
                                                              text="PARSE TEST CASE",
-                                                             command=self.select_catalog)
+                                                             command=self.start_parse)
         self.select_catalog_button.grid(row=0, column=0, pady=(10, 10), padx=10, sticky="wesn")
 
     def check_box_update_event(self):
-       pass
+        pass
 
     def on_closing(self):
         for key_checkbox, item_checkbox in self.checkbox_dict.items():
@@ -102,20 +106,32 @@ class App(customtkinter.CTk):
         self.SaveOptToCfg(self.configFilePath, section="DEFAULT", option="template directory", value=str(self.live_template_path))
         self.destroy()
 
-    def select_catalog(self):
-        pass
+    def select_catalog_event(self):
+        self.file_to_parse = []
+        self.lastDir = filedialog.askdirectory()
+        self.file_to_parse = [f"{self.lastDir}/{each.name}" for each in os.scandir(self.lastDir)]
 
-    def select_file(self):
-        pass
+    def select_file_event(self):
+        self.file_to_parse = []
+        list_files_path = filedialog.askopenfilenames(
+            title="Select file",
+            filetypes=(("python file", "*.py"), ("text file", "*.txt"), ("All files", "*.*"),)
+        )
+        self.lastDir = os.path.split(list_files_path[0])[0]
+        self.file_to_parse = list_files_path
 
     def start_parse(self):
-        lines_file = []
-        if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "verify coding"):
-            lines_file = self.validate_verify_coding(lines_file)
+        for file_open_path in self.file_to_parse:
+            with open(file_open_path, "r") as open_file:
+                self.temporary_file = open_file.readlines()
+            if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "verify coding"):
+                self.validate_verify_coding()
 
-        for line_number, current_line in enumerate(lines_file, start=1):
-            pass
+            with open(file_open_path, "w") as open_file:
+                open_file.writelines(self.temporary_file)
 
+            # for line_number, current_line in enumerate(temporary_file, start=1):
+            #     pass
 
     def GetOptionFromCfg(self, cfg_path, section, option):
         if os.path.isfile(cfg_path):
@@ -134,25 +150,17 @@ class App(customtkinter.CTk):
         with open(cfg_path, "w") as opened_file:
             self.config.write(opened_file)
 
-    def validate_verify_coding(self, file_data):
+    def validate_verify_coding(self):
         # VALIDATION OF CODING: EXPECTED UTF-8
+
         temp_file_data = []
-        if r"# -*- coding: utf-8 -*-" not in file_data[0]:
-            if self.flag_print:
-                print("File:", self.current_file, "\tIn first line coding utf-8 is missing, expected: # -*- coding: utf-8 -*-")
-            if self.flag_fix:
-                temp_file_data.append("# -*- coding: utf-8 -*-\n")
-        return temp_file_data.append(file_data)
-
-
-
-
-
-
-
-
-
-
+        if len(self.temporary_file) > 0:
+            if r"# -*- coding: utf-8 -*-" not in self.temporary_file[0]:
+                if self.flag_print:
+                    print("File:", self.current_file, "\tIn first line coding utf-8 is missing, expected: # -*- coding: utf-8 -*-")
+                if self.flag_fix:
+                    temp_file_data.append("# -*- coding: utf-8 -*-\n")
+                    self.temporary_file = temp_file_data + self.temporary_file
 
 
 if __name__ == '__main__':
