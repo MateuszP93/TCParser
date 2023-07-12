@@ -24,6 +24,7 @@ class App(customtkinter.CTk):
     old_template = False
 
     options = ["Verify Coding",
+               "Remove unnecessary lines",
                "Verify ASCII chars range",
                "Validation of headers",
                "Use of single quotes",
@@ -102,7 +103,6 @@ class App(customtkinter.CTk):
     def check_box_update_event(self):
         pass
 
-
     def on_closing(self):
         for key_checkbox, item_checkbox in self.checkbox_dict.items():
             self.SaveOptToCfg(self.configFilePath, section="DEFAULT", option=key_checkbox.lower(), value=str(item_checkbox.get()))
@@ -130,9 +130,10 @@ class App(customtkinter.CTk):
             with open(file_open_path, "r") as open_file:
                 self.temporary_file = open_file.readlines()
 
-
             if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "verify coding"):
                 self.validate_verify_coding()
+            if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "remove unnecessary lines"):
+                self.remove_unnecessary_empty_lines()
 
             for each_line in self.temporary_file:
                 self.current_line = each_line
@@ -171,7 +172,7 @@ class App(customtkinter.CTk):
         if self.old_template:
             temporary_file = re.search("( *Step\()([\"\'].*[\"\'])(\))", self.current_line)
         else:
-            temporary_file = re.search("( *with Step\()([\"\'].*[\"\'])(, ?\d\)\:|\):)", self.current_line)
+            temporary_file = re.search("( *with Step\()([\"\'].*[\"\'])(, ?\d\):|\):)", self.current_line)
         temporary_string = ""
         if temporary_file is not None and len(temporary_file.groups()) > 1:
             for each_index, each_group in enumerate(temporary_file.groups()):
@@ -179,7 +180,7 @@ class App(customtkinter.CTk):
             self.current_line = temporary_string + "\n"
 
     def validate_indentation_level(self):
-        temporary_file = re.search("( *)(with Step\([\"\'].*[\"\'])(, ?\d\)\:|\):)", self.current_line)
+        temporary_file = re.search("( *)(with Step\([\"\'].*[\"\'])(, ?\d\):|\):)", self.current_line)
         temporary_string = ""
         if temporary_file is not None and len(temporary_file.groups()) == 3:
             indentation_no = (len(temporary_file.groups()[0]) // 4) + 1
@@ -198,6 +199,14 @@ class App(customtkinter.CTk):
                 if self.flag_fix:
                     temp_file_data.append("# -*- coding: utf-8 -*-\n")
                     self.temporary_file = temp_file_data + self.temporary_file
+
+    def remove_unnecessary_empty_lines(self):
+        if len(self.temporary_file) > 0:
+            temporary_file = ""
+            for each_line in self.temporary_file:
+                temporary_file += each_line
+            temporary_file = re.sub("\n{2,}", "\n\n", temporary_file)
+            self.temporary_file = [each_line + "\n" for each_line in temporary_file.split("\n")]
 
 
 if __name__ == '__main__':
