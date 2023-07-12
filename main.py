@@ -2,6 +2,7 @@ import customtkinter
 import os
 import configparser
 from tkinter import filedialog
+import re
 
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
 
@@ -19,6 +20,8 @@ class App(customtkinter.CTk):
     current_file = ""
     WIDTH = 600
     HEIGHT = 700
+    current_line = ""
+    old_template = False
 
     options = ["Verify Coding",
                "Verify ASCII chars range",
@@ -99,6 +102,7 @@ class App(customtkinter.CTk):
     def check_box_update_event(self):
         pass
 
+
     def on_closing(self):
         for key_checkbox, item_checkbox in self.checkbox_dict.items():
             self.SaveOptToCfg(self.configFilePath, section="DEFAULT", option=key_checkbox.lower(), value=str(item_checkbox.get()))
@@ -122,11 +126,24 @@ class App(customtkinter.CTk):
 
     def start_parse(self):
         for file_open_path in self.file_to_parse:
+            temp_data_line = []
             with open(file_open_path, "r") as open_file:
                 self.temporary_file = open_file.readlines()
+
+
             if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "verify coding"):
                 self.validate_verify_coding()
 
+            for each_line in self.temporary_file:
+                self.current_line = each_line
+
+                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "excessive spacebards"):
+                    self.validate_spacebars_in_step()
+                    self.validate_indentation_level()
+
+                temp_data_line.append(self.current_line)
+
+            self.temporary_file = temp_data_line
             with open(file_open_path, "w") as open_file:
                 open_file.writelines(self.temporary_file)
 
@@ -149,6 +166,26 @@ class App(customtkinter.CTk):
         self.config.set(section, option, value)
         with open(cfg_path, "w") as opened_file:
             self.config.write(opened_file)
+
+    def validate_spacebars_in_step(self):
+        if self.old_template:
+            temporary_file = re.search("( *Step\()([\"\'].*[\"\'])(\))", self.current_line)
+        else:
+            temporary_file = re.search("( *with Step\()([\"\'].*[\"\'])(, ?\d\)\:|\):)", self.current_line)
+        temporary_string = ""
+        if temporary_file is not None and len(temporary_file.groups()) > 1:
+            for each_index, each_group in enumerate(temporary_file.groups()):
+                temporary_string += each_group if each_index != 1 else re.sub(" {2,}", " ", each_group)
+            self.current_line = temporary_string + "\n"
+
+    def validate_indentation_level(self):
+        temporary_file = re.search("( *)(with Step\([\"\'].*[\"\'])(, ?\d\)\:|\):)", self.current_line)
+        temporary_string = ""
+        if temporary_file is not None and len(temporary_file.groups()) == 3:
+            indentation_no = (len(temporary_file.groups()[0]) // 4) + 1
+            for each_index, each_group in enumerate(temporary_file.groups()[:-1]):
+                temporary_string += (" " * ((indentation_no - 1) * 4)) if each_index == 0 else each_group
+            self.current_line = temporary_string + (f", {indentation_no}):" if indentation_no > 1 else "):") + "\n"
 
     def validate_verify_coding(self):
         # VALIDATION OF CODING: EXPECTED UTF-8
