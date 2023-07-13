@@ -1,4 +1,5 @@
 import customtkinter
+import traceback
 import os
 import configparser
 from tkinter import filedialog
@@ -25,14 +26,17 @@ class App(customtkinter.CTk):
 
     options = ["Verify Coding",
                "Remove unnecessary lines",
+               "Excessive Spacebards",
+               "Indentation step level",
+               "Step finished with dot",
+
                "Verify ASCII chars range",
                "Validation of headers",
                "Use of single quotes",
                "Not closed quotes",
                "Indentation of Steps",
                "Variables in Steps",
-               "Excessive Spacebards",
-               "Step finished with dot",
+
                "Not closed backets",
                "Binary operators correctness",
                "Semicolor termination",
@@ -111,11 +115,18 @@ class App(customtkinter.CTk):
         self.destroy()
 
     def select_catalog_event(self):
+        self.textbox.delete("0.0", "end")
         self.file_to_parse = []
         self.lastDir = filedialog.askdirectory()
         self.file_to_parse = [f"{self.lastDir}/{each.name}" for each in os.scandir(self.lastDir)]
+        temp_text = ""
+        list_files_path = self.file_to_parse
+        for each_name in list_files_path:
+            temp_text += os.path.split(each_name)[1] + "\n"
+        self.textbox.insert("0.0", temp_text)
 
     def select_file_event(self):
+        self.textbox.delete("0.0", "end")
         self.file_to_parse = []
         list_files_path = filedialog.askopenfilenames(
             title="Select file",
@@ -123,6 +134,10 @@ class App(customtkinter.CTk):
         )
         self.lastDir = os.path.split(list_files_path[0])[0]
         self.file_to_parse = list_files_path
+        temp_text = ""
+        for each_name in list_files_path:
+            temp_text += os.path.split(each_name)[1] + "\n"
+        self.textbox.insert("0.0", temp_text)
 
     def start_parse(self):
         for file_open_path in self.file_to_parse:
@@ -140,16 +155,19 @@ class App(customtkinter.CTk):
 
                 if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "excessive spacebards"):
                     self.validate_spacebars_in_step()
+
+                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "Indentation step level"):
                     self.validate_indentation_level()
 
-                temp_data_line.append(self.current_line)
+                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "Step finished with dot"):
+                    self.validate_dot_on_the_end()
 
+                temp_data_line.append(self.current_line)
             self.temporary_file = temp_data_line
+
+            self.ParseFile()
             with open(file_open_path, "w") as open_file:
                 open_file.writelines(self.temporary_file)
-
-            # for line_number, current_line in enumerate(temporary_file, start=1):
-            #     pass
 
     def GetOptionFromCfg(self, cfg_path, section, option):
         if os.path.isfile(cfg_path):
@@ -190,7 +208,6 @@ class App(customtkinter.CTk):
 
     def validate_verify_coding(self):
         # VALIDATION OF CODING: EXPECTED UTF-8
-
         temp_file_data = []
         if len(self.temporary_file) > 0:
             if r"# -*- coding: utf-8 -*-" not in self.temporary_file[0]:
@@ -200,6 +217,15 @@ class App(customtkinter.CTk):
                     temp_file_data.append("# -*- coding: utf-8 -*-\n")
                     self.temporary_file = temp_file_data + self.temporary_file
 
+    def validate_dot_on_the_end(self):
+        temporary_file = re.search("( *.*Step\([\"\'].*\n*.*)(\.)(\".*\))", self.current_line)
+        if temporary_file is not None and len(temporary_file.groups()) == 3:
+            temporary_string = ""
+            for each_index, each_line in enumerate(temporary_file.groups()):
+                if each_index != 1:
+                    temporary_string += each_line
+            self.current_line = temporary_string + "\n"
+
     def remove_unnecessary_empty_lines(self):
         if len(self.temporary_file) > 0:
             temporary_file = ""
@@ -207,6 +233,136 @@ class App(customtkinter.CTk):
                 temporary_file += each_line
             temporary_file = re.sub("\n{2,}", "\n\n", temporary_file)
             self.temporary_file = [each_line + "\n" for each_line in temporary_file.split("\n")]
+
+    def ParseFile(self, ):
+        #     status = 'OK'
+        MAX_STEP_LEVEL = 3
+        tcLines = self.temporary_file
+
+        stepNumber = MAX_STEP_LEVEL * [0]  # counter for steps numerating
+        logsNumber = 0
+        procedure = '\n##    PROCEDURE:\n'  # procedure string
+        procedureFlag = False  # True during procedure lines parsing, False when parsing complete
+        reqirementFlag = False  # True when requrements are parsed
+        parsedLines = []
+        headerEndLineNumber = 0
+        errorList = []  # line number, error description
+        lineNumberOffset = 0
+
+        for lineNumber, line in enumerate(tcLines, 1):
+            if not headerEndLineNumber:
+                if line.startswith('""")'):
+                    headerEndLineNumber = lineNumber
+                elif line.startswith('header.Log()'):
+                    headerEndLineNumber = lineNumber + 1
+
+            if not line.startswith('#') and line.count("'") and (not line.count('"') or line.find("'") < line.find('"')):
+                errorList.append(
+                    [lineNumber, ' - single quote(s) instead of double quote(s): strings shall be in double quotes ["].'])
+                status = 'NOK'
+
+            elif not line.startswith('#') and line.count('"') % 2 and not line.count('"""'):
+                errorList.append([lineNumber, ' - lack quotation mark(s): strings shall be in quotation marks ["].'])
+                status = 'NOK'
+
+            elif re.search(r'^#* *Req *\(', line):
+                reqirementFlag = True
+                if not line.startswith('#'):  # process only not hashed lines
+                    line = re.sub(r'Req *\( *\[ *" *', 'Req(["', line,
+                                  1)  # delete needless space chars in `Req ( [ " ` string
+                    line = re.sub(r' *" *\] *\) *$', '"])', line, 1)  # delete needless space chars in ` " ] ) ` string
+                    line = re.sub(r' *" *, *" *', '", "', line)  # delete needless space chars in ` " , " ` string
+
+                    if not re.search(r'Req\(\[.*\]\)', line):
+                        errorList.append([lineNumber, ' - lack bracket: requirements shall be list of strings.'])
+                        status = 'NOK'
+                    else:
+                        requirements = re.search(r'(?<=\[).*(?=\])', line).group()
+                        bordersCheck = re.search(r'(^[^"])|([^"]$)', requirements)  # check if starts and ends with "
+                        oneQuotationMarkCheck = re.search(r'(^"$)',
+                                                          requirements)  # check if only one " (quotation mark) is used
+                        internalCheck = re.search(r'([^"], )|(, [^"])',
+                                                  requirements)  # check if , (comma) is rounded by " (quotation marks)
+                        if bordersCheck or oneQuotationMarkCheck or internalCheck:
+                            errorList.append(
+                                [lineNumber, ' - lack quotation mark(s): requirements shall be list of strings.'])
+                            status = 'NOK'
+
+            elif re.search(r'^[ \t]*Step *\(', line) or re.search(r'^[ \t]*with Step *\(', line):
+                try:
+                    indent = re.search(r'^[ \t]*', line).group()
+                    level = re.search(r'" *, *(\d+) *\)', line)
+                    if level:
+                        level = int(level.groups()[0])
+                        levelStr = ', ' + str(level)
+                    else:
+                        level = 1
+                        levelStr = ''
+                    if level > MAX_STEP_LEVEL:
+                        errorList.append(
+                            [lineNumber, ' - wrong level value: level parameter shall be one of integers 1, 2 or 3.'])
+                        status = 'NOK'
+                    else:
+                        text = ' ' + re.search(r'"[ \d.]*(.*?) *"', line).groups()[0]
+                        stepText = ''
+                        stepNumber[level - 1] += 1
+                        for i in range(MAX_STEP_LEVEL):
+                            if i < level:
+                                if stepNumber[i] == 0:
+                                    stepNumber[i] += 1
+                                stepText += str(stepNumber[i]) + '.'
+                            else:
+                                stepNumber[i] = 0
+                        # if OldTestCaseStyle == 0:
+                        #     if line.startswith("Step("):
+                        #         print(f"You have selected New TC's ABC model, line: {lineNumber} "
+                        #               "Incorrect naming, use 'with Step(' in your TC's instead")
+                        #     else:
+                        #         line = indent + 'with Step("' + stepText + text + '"' + levelStr + '):\n'
+                        # else:
+                        #     if OldTestCaseStyle == 1:
+                        #         if line.startswith("with Step(") or line.startswith("    "):
+                        #             print(f"You have selected OLD TC's model, line: {lineNumber} "
+                        #                   "Incorrect naming, use 'Step(' in your TC's instead")
+                        #         else:
+                        #             line = indent + 'Step("' + stepText + text + '"' + levelStr + ')\n'
+                        procedure += '##    ' + stepText + text + '\n'
+                except:
+                    errorList.append([lineNumber, ' exception - ' + traceback.format_exc()])
+                    status = 'NOK'
+
+            elif re.search(r'^[ \t]*Logs *\(', line):
+                try:
+                    line = re.sub(r'Logs *\( *" *', 'Logs("', line, 1)  # delete needless space chars in "Logs ( " string
+                    line = re.sub(r' *" *\) *$', '")', line, 1)  # delete needless space chars in " ) " string
+                    logsNumber += 1
+                    line = re.sub(r'(?<=[\'"]) *\d*\.* *', str(logsNumber) + '. ', line, 1)  # update test logs number
+                    procedure += '##    ' + re.search(r'(?<=[\'"]).*(?=[\'"])', line).group() + '\n'
+                except:
+                    errorList.append([lineNumber, ' exception - ' + traceback.format_exc()])
+                    status = 'NOK'
+
+            if line == '##    PROCEDURE:\n':
+                procedureFlag = True
+
+            if procedureFlag and not (line.isspace() or line.startswith('##    ')):
+                procedureFlag = False
+
+            if procedureFlag:  # delete procedure lines
+                lineNumberOffset -= 1
+            else:
+                parsedLines.append(line)
+
+        if not reqirementFlag:
+            procedure += '#Req([])\n'
+
+        lineNumberOffset += procedure.count('\n')
+        for lineNumber, errorDescription in errorList:
+            if lineNumber > headerEndLineNumber:
+                lineNumber = lineNumber + lineNumberOffset
+            # print(("Error: " + fileName + ", line: " + str(lineNumber) + errorDescription))
+
+        # parsedLines.insert(headerEndLineNumber, procedure)
 
 
 if __name__ == '__main__':
