@@ -4,6 +4,8 @@ import os
 import configparser
 from tkinter import filedialog
 import re
+import json
+from xml.dom import minidom
 from pprint import pprint as pp
 
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
@@ -27,7 +29,7 @@ class App(customtkinter.CTk):
     current_file_name = ""
     old_template = False
     errorList = []  # line number, error description
-
+    procedure_line = ""
     options = [
         "Update Step level",
         "Verify Coding",
@@ -164,6 +166,10 @@ class App(customtkinter.CTk):
         self._update_init_file()
         for file_open_path in self.file_to_parse:
             self.current_file_name = os.path.split(file_open_path)[1]
+
+            if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "template updater", int_return=True):
+                self.update_templates(file_open_path)
+
             temp_data_line = []
             with open(file_open_path, "r") as open_file:
                 self.temporary_file = open_file.readlines()
@@ -203,10 +209,13 @@ class App(customtkinter.CTk):
             if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "update step level", int_return=True):
                 self.parse_step_level_file()
 
+            self.append_step_procedure()
+
             with open(file_open_path, "w") as open_file:
                 open_file.writelines(self.temporary_file)
 
             self._PrintErrorList()
+            print("Parsing finished, world will better now!")
 
     def GetOptionFromCfg(self, cfg_path, section, option, int_return=False):
         if os.path.isfile(cfg_path):
@@ -266,8 +275,9 @@ class App(customtkinter.CTk):
             self.current_line = temporary_string + "\n"
 
     def _PrintErrorList(self):
-        for each_error in self.errorList:
-            print(f"File: {each_error[0]},\t line: {each_error[1]},\t fault detected: {each_error[2]}")
+        if len(self.errorList) > 0:
+            for each_error in self.errorList:
+                print(f"File: {each_error[0]},\t line: {each_error[1]},\t fault detected: {each_error[2]}")
 
     def validate_level_log_indentation(self):
         temp_line = self.current_line
@@ -338,7 +348,7 @@ class App(customtkinter.CTk):
         tcLines = self.temporary_file
 
         stepNumber = MAX_STEP_LEVEL * [0]  # counter for steps numerating
-        procedure = '\n##    PROCEDURE:\n'  # procedure string
+        self.procedure_line = ['\n##    PROCEDURE:\n']  # procedure string
         parsedLines = []
 
         OldTestCaseStyle = self.checkbox_version.get()
@@ -380,7 +390,7 @@ class App(customtkinter.CTk):
                                       "Incorrect naming, use 'Step(' in your TC's instead")
                             else:
                                 line = indent + 'Step("' + stepText + text + '"' + levelStr + ')\n'
-                        procedure += '##    ' + stepText + text + '\n'
+                        self.procedure_line.append('##    ' + stepText + text + '\n')
                         parsedLines.append(line)
                 except:
                     self.errorList.append([lineNumber, ' exception - ' + traceback.format_exc()])
@@ -396,6 +406,110 @@ class App(customtkinter.CTk):
             for each_index, each_line in enumerate(temporary_file.groups()):
                 temporary_string += each_line
             self.current_line = temporary_string + "\n"
+
+    def append_step_procedure(self):
+        temp_file_lines = self.temporary_file[:]
+        start_procedure_list = None
+        procedure_flag = False
+        procedure_start = None
+        procedure_stop = None
+        log_end = None
+
+        for each_index, each_line in enumerate(temp_file_lines):
+            each_line: str
+            if "##    PROCEDURE:" in each_line:
+                procedure_flag = True
+                procedure_start = each_index
+
+            if "header.Log()" in each_line:
+                log_end = each_index
+
+            if procedure_flag and not each_line.startswith("## "):
+                procedure_flag = False
+                procedure_stop = each_index
+        if procedure_start is not None:
+            del temp_file_lines[procedure_start:procedure_stop]
+            copy_temp_file = temp_file_lines[:procedure_start] + self.procedure_line + temp_file_lines[procedure_start:] + ["\n"]
+        else:
+            if log_end is not None:
+                procedure_start = log_end+1
+                copy_temp_file =  temp_file_lines[:procedure_start] + ["\n"] + self.procedure_line + temp_file_lines[procedure_start:] + ["\n"]
+            else:
+                copy_temp_file = temp_file_lines[:]
+        self.temporary_file = copy_temp_file[:]
+
+    def update_templates(self, tc_path):
+
+        xml_path = self.GetOptionFromCfg(cfg_path=self.configFilePath, section="DEFAULT", option="template directory")
+
+        file = open(tc_path, "r")
+        script = file.read()
+
+        parsedFile = minidom.parse(xml_path)
+        tags_dict = {}
+        for tag in parsedFile.getElementsByTagName("template"):
+            name = tag.attributes.get("name").value
+            value = tag.attributes.get("value").value
+            tags_dict.update({name: value})
+
+        start_tags_no = script.count("# <editor-fold")
+        end_tags_no = script.count("# </editor-fold")
+
+        if start_tags_no != end_tags_no:
+            print("Open and closed <editor-fold> tags doesn't match!")
+            print(tc_path)
+            exit(1)
+        if not start_tags_no:
+            print("No tags: skip")
+            # continue
+            # exit(0)
+
+        start_tags = []
+        end_tags = []
+        for start_tag in re.finditer("# <editor-fold.+?>", script):
+            start_tags.append(start_tag)
+        for end_tag in re.finditer("# </editor-fold>", script):
+            end_tags.append(end_tag)
+
+        if start_tags_no != len(start_tags) != len(end_tags):
+            print("Error: Likely internal script issue!")
+            exit(1)
+
+        for start_tag, end_tag in zip(reversed(start_tags), reversed(end_tags)):
+            to_update = script[start_tag.start():end_tag.end()]
+            desc = re.search(r'desc="(.*?)"', start_tag.group()).group(1)
+            if desc not in tags_dict.keys():
+                print("Warning: tag was not found and wasn't replaced: %s" % (desc,))
+                continue
+            update_counts = script.count(to_update)
+            if update_counts != 1:
+                print("Warning: %d occurrences of same tag" % (update_counts,))
+            update = tags_dict[desc].strip()  # strip to remove excessive new lines
+
+            # Get string with values as dict from <editor-fold> tag
+            var = re.search(r"var={(.*?)}", start_tag.group())
+            var_dict = {}
+            if var:
+                var = var.group()[4:]
+                try:
+                    var_dict = json.loads(var)
+                except json.decoder.JSONDecodeError:
+                    print("Error: json tag issue!")
+                    print(var)
+                except:
+                    print("Error: likely json tag issue!")
+
+            for key, value in var_dict.items():
+                _key = key.join(["$", "$"])  # add $ to variable name
+                update = update.replace(_key, str(value))  # replace variables with value from <editor-fold> tag
+
+            script = update.join(script.rsplit(to_update, 1))  # Replace last occurrence
+
+        file.close()
+
+        file = open(tc_path, "w")
+        file.write(script)
+        file.close()
 
 if __name__ == '__main__':
     app = App()
