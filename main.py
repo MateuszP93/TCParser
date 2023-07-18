@@ -37,6 +37,7 @@ class App(customtkinter.CTk):
         "Indentation log level",
         "Step finished with dot",
         "Validate requirements",
+        "Remove spacebars template",
 
         "Verify ASCII chars range",
         "Validation of headers",
@@ -176,6 +177,9 @@ class App(customtkinter.CTk):
                 self.current_line = each_line
                 self.current_line_no = each_line_no
 
+                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "Remove spacebars template", int_return=True):
+                    self.remove_unnecessary_white_signs_before_editor()
+
                 if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "excessive spacebards", int_return=True):
                     self.validate_spacebars_in_step()
 
@@ -291,7 +295,6 @@ class App(customtkinter.CTk):
                                    ' exception - ' + traceback.format_exc()])
             status = 'NOK'
 
-
     def validate_indentation_level(self):
         temporary_file = re.search("( *)(with Step\([\"\'].*[\"\'])(, ?\d\):|\):)", self.current_line)
         temporary_string = ""
@@ -385,6 +388,13 @@ class App(customtkinter.CTk):
                 parsedLines.append(line)
         self.temporary_file = parsedLines
 
+    def remove_unnecessary_white_signs_before_editor(self):
+        temporary_file = re.search("[ ]+#[\s]?(<[/]?editor)(.*)", self.current_line)
+        if temporary_file is not None:
+            temporary_string = "# "
+            for each_index, each_line in enumerate(temporary_file.groups()):
+                temporary_string += each_line
+            self.current_line = temporary_string + "\n"
 
 if __name__ == '__main__':
     app = App()
