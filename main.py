@@ -4,6 +4,7 @@ import os
 import configparser
 from tkinter import filedialog
 import re
+from pprint import pprint as pp
 
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
 
@@ -22,6 +23,8 @@ class App(customtkinter.CTk):
     WIDTH = 600
     HEIGHT = 700
     current_line = ""
+    current_line_no = 1
+    current_file_name = ""
     old_template = False
     errorList = []  # line number, error description
 
@@ -31,7 +34,9 @@ class App(customtkinter.CTk):
         "Remove unnecessary lines",
         "Excessive Spacebards",
         "Indentation step level",
+        "Indentation log level",
         "Step finished with dot",
+        "Validate requirements",
 
         "Verify ASCII chars range",
         "Validation of headers",
@@ -93,7 +98,6 @@ class App(customtkinter.CTk):
         for index, option_name in enumerate(self.options):
             checkbox = customtkinter.CTkCheckBox(master=self.select_grid, text=f"{option_name}", command=self.check_box_update_event)
             checkbox.grid(row=index // 3, column=index % 3, pady=8, padx=10, sticky="nwe")
-            print(option_name)
             checkbox.select() if int(self.GetOptionFromCfg(self.configFilePath, section="DEFAULT", option=option_name)) else checkbox.deselect()
             self.checkbox_dict.update({option_name: checkbox})
 
@@ -155,43 +159,60 @@ class App(customtkinter.CTk):
         self.textbox.insert("0.0", temp_text)
 
     def start_parse(self):
+        self.errorList = []
         self._update_init_file()
         for file_open_path in self.file_to_parse:
+            self.current_file_name = os.path.split(file_open_path)[1]
             temp_data_line = []
             with open(file_open_path, "r") as open_file:
                 self.temporary_file = open_file.readlines()
 
-            if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "verify coding"):
+            if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "verify coding", int_return=True):
                 self.validate_verify_coding()
-            if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "remove unnecessary lines"):
+            if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "remove unnecessary lines", int_return=True):
                 self.remove_unnecessary_empty_lines()
 
-            for each_line in self.temporary_file:
+            for each_line_no, each_line in enumerate(self.temporary_file, start=1):
                 self.current_line = each_line
+                self.current_line_no = each_line_no
 
-                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "excessive spacebards"):
+                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "excessive spacebards", int_return=True):
                     self.validate_spacebars_in_step()
 
-                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "Indentation step level"):
+                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "Indentation step level", int_return=True):
                     self.validate_indentation_level()
 
-                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "Step finished with dot"):
+                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "Indentation log level", int_return=True):
+                    self.validate_level_log_indentation()
+                    self.validate_whitespaces_in_log()
+
+                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "Step finished with dot", int_return=True):
                     self.validate_dot_on_the_end()
+
+                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "validate requirements", int_return=True):
+                    self.validate_requirement()
 
                 temp_data_line.append(self.current_line)
             self.temporary_file = temp_data_line
-            if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "update step level"):
+
+            # Parse testcase and update steps number
+            if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "update step level", int_return=True):
                 self.parse_step_level_file()
 
             with open(file_open_path, "w") as open_file:
                 open_file.writelines(self.temporary_file)
 
-    def GetOptionFromCfg(self, cfg_path, section, option):
+            self._PrintErrorList()
+
+    def GetOptionFromCfg(self, cfg_path, section, option, int_return=False):
         if os.path.isfile(cfg_path):
             with open(cfg_path) as opened_file:
                 self.config.read_file(opened_file)
                 if self.config.has_option(section, option):
-                    return self.config.get(section, option)
+                    if int_return:
+                        return int(self.config.get(section, option))
+                    else:
+                        return self.config.get(section, option)
                 else:
                     print(f"option: {option} in section {section} doesn't exist")
                     return None
@@ -203,6 +224,32 @@ class App(customtkinter.CTk):
         with open(cfg_path, "w") as opened_file:
             self.config.write(opened_file)
 
+    def validate_requirement(self):
+        line = self.current_line
+        if re.search(r'^#* *Req *\(', line):
+            if not line.startswith('#'):  # process only not hashed lines
+                line = re.sub(r'Req *\( *\[ *" *', 'Req(["', line,
+                              1)  # delete needless space chars in `Req ( [ " ` string
+                line = re.sub(r' *" *\] *\) *$', '"])', line, 1)  # delete needless space chars in ` " ] ) ` string
+                line = re.sub(r' *" *, *" *', '", "', line)  # delete needless space chars in ` " , " ` string
+
+                if not re.search(r'Req\([\[].*[\]]\)', line):
+                    self.errorList.append([self.current_file_name,
+                                           self.current_line_no,
+                                           'Lack bracket: requirements shall be list of strings.'])
+                else:
+                    requirements = re.search(r'(?<=\[).*(?=])', line).group()
+                    bordersCheck = re.search(r'(^[^"])|([^"]$)', requirements)  # check if starts and ends with "
+                    oneQuotationMarkCheck = re.search(r'(^"$)',
+                                                      requirements)  # check if only one " (quotation mark) is used
+                    internalCheck = re.search(r'([^"], )|(, [^"])',
+                                              requirements)  # check if , (comma) is rounded by " (quotation marks)
+                    if bordersCheck or oneQuotationMarkCheck or internalCheck:
+                        self.errorList.append(
+                            [self.current_file_name,
+                             self.current_line_no,
+                             'Lack quotation mark(s): requirements shall be list of strings.'])
+
     def validate_spacebars_in_step(self):
         if self.old_template:
             temporary_file = re.search("( *Step\()([\"\'].*[\"\'])(\))", self.current_line)
@@ -213,6 +260,37 @@ class App(customtkinter.CTk):
             for each_index, each_group in enumerate(temporary_file.groups()):
                 temporary_string += each_group if each_index != 1 else re.sub(" {2,}", " ", each_group)
             self.current_line = temporary_string + "\n"
+    def _PrintErrorList(self):
+        for each_error in self.errorList:
+            print(f"File: {each_error[0]},\t line: {each_error[1]},\t fault detected: {each_error[2]}")
+
+    def validate_level_log_indentation(self):
+        temp_line = self.current_line
+        allowed_level_list = [1, 2, 3]
+        indentation_log_level = re.match("(\s*Log\([\"\'].*[\"\'],? ?)(\d?)\)", temp_line)
+        if indentation_log_level is not None:
+            indentation_log_level = indentation_log_level.groups()
+            if len(indentation_log_level[1]) > 0:
+                indentation_log_level = int(indentation_log_level[1])
+            else:
+                indentation_log_level = 1
+            if indentation_log_level not in allowed_level_list:
+                self.errorList.append([self.current_file_name,
+                                       self.current_line_no,
+                                       f"Incorrect Log level, current level: {indentation_log_level}, allowed levels: {allowed_level_list}"])
+
+    def validate_whitespaces_in_log(self):
+        line = self.current_line
+        try:
+            line = re.sub(r'Log *\( *" *', 'Log("', line, 1)  # delete needless space chars in "Logs ( " string
+            line = re.sub(r' *" *\) *$', '")', line, 1)  # delete needless space chars in " ) " string
+            self.current_line = line
+        except:
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   ' exception - ' + traceback.format_exc()])
+            status = 'NOK'
+
 
     def validate_indentation_level(self):
         temporary_file = re.search("( *)(with Step\([\"\'].*[\"\'])(, ?\d\):|\):)", self.current_line)
@@ -306,7 +384,6 @@ class App(customtkinter.CTk):
             else:
                 parsedLines.append(line)
         self.temporary_file = parsedLines
-
 
 
 if __name__ == '__main__':
