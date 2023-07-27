@@ -173,6 +173,7 @@ class App(customtkinter.CTk):
             temp_data_line = []
             with open(file_open_path, "r") as open_file:
                 self.temporary_file = open_file.readlines()
+                self.validation_header()
 
             if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "verify coding", int_return=True):
                 self.validate_verify_coding()
@@ -433,7 +434,7 @@ class App(customtkinter.CTk):
         else:
             if log_end is not None:
                 procedure_start = log_end+1
-                copy_temp_file =  temp_file_lines[:procedure_start] + ["\n"] + self.procedure_line + temp_file_lines[procedure_start:] + ["\n"]
+                copy_temp_file = temp_file_lines[:procedure_start] + ["\n"] + self.procedure_line + temp_file_lines[procedure_start:] + ["\n"]
             else:
                 copy_temp_file = temp_file_lines[:]
         self.temporary_file = copy_temp_file[:]
@@ -510,6 +511,46 @@ class App(customtkinter.CTk):
         file = open(tc_path, "w")
         file.write(script)
         file.close()
+
+    def validation_header(self):
+        line_temporary = self.temporary_file[:]
+        start_header = None
+        stop_header = None
+        header_line_list = []
+
+        expected_headers = [
+            ["header = log.header()", 'header = log.header()'],
+            ["header.testID", 'header.testID = ""'],
+            ["header.description", 'header.description = ""'],
+            ["header.priority", 'header.priority = 1'],
+            ["header.CMPath", 'header.CMPath = "$$"'],
+            ["header.date", 'header.date = "$$"'],
+            ["header.revision", 'header.revision = "$$"'],
+            ["header.modifiedby", 'header.modifiedby = "$$"'],
+            ["header.automation", 'header.automation = "full"'],
+            ["header.Log()", 'header.Log()'],
+        ]
+
+        for line_index, each_line in enumerate(line_temporary):
+            each_line:str
+            if each_line.startswith("header = log.header()"):
+                start_header = line_index
+
+            if each_line.startswith("header.Log()"):
+                stop_header = line_index
+
+            if each_line.startswith("header"):
+                header_line_list.append(each_line+"\n")
+
+        for each_line in header_line_list:
+            pass
+
+        if start_header is not None and stop_header is not None:
+            del line_temporary[start_header:stop_header]
+            pass
+
+        print(header_line_list)
+
 
 if __name__ == '__main__':
     app = App()
