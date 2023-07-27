@@ -7,11 +7,20 @@ import re
 import json
 from xml.dom import minidom
 from pprint import pprint as pp
+import logging
+import time
 
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
 
 
 class App(customtkinter.CTk):
+    # logging.basicConfig(level=logging.DEBUG,
+    #                     format="%(asctime)s %(levelname)s %(meassage)s",
+    #                     datefmt="%Y-%m-%d %H:%M:%S")
+    logging.basicConfig(level=logging.WARNING,
+                        format="%(asctime)s - %(funcName)20s() - %(levelname)s - %(message)s",
+                        datefmt="%Y-%m-%d %H:%M:%S")
+
     config = configparser.ConfigParser()
     configFileName = "/tc_parser.ini"
     configFilePath = os.getcwd() + configFileName
@@ -22,19 +31,20 @@ class App(customtkinter.CTk):
     flag_print = True
     flag_fix = True
     current_file = ""
-    WIDTH = 600
-    HEIGHT = 700
+    WIDTH = 1400
+    HEIGHT = 800
     current_line = ""
     current_line_no = 1
     current_file_name = ""
     old_template = False
     errorList = []  # line number, error description
     procedure_line = ""
+    checkbox_dict = {}
     options = [
         "Update Step level",
         "Verify Coding",
         "Remove unnecessary lines",
-        "Excessive Spacebards",
+        "Excessive Spacebars",
         "Indentation step level",
         "Indentation log level",
         "Step finished with dot",
@@ -59,6 +69,7 @@ class App(customtkinter.CTk):
         "Template updater"]
 
     def __init__(self):
+
         self.lastDir = self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "last directory")
         self.live_template_path = self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "template directory")
         super().__init__()
@@ -66,27 +77,39 @@ class App(customtkinter.CTk):
         self.title("TC Parser")
         self.geometry(f"{App.WIDTH}x{App.HEIGHT}")
         self.protocol("WM_DELETE_WINDOW", self.on_closing)  # call .on_closing() when app gets closed
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure((1, 2), weight=1)
-        # ====================== header settings ======================
-        self.header = customtkinter.CTkFrame(master=self)
-        self.header.grid(row=0, column=0, sticky="we", padx=10, pady=(10, 0))
+        self.grid_columnconfigure((0, 1), weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
+        self.bottom_grid_level = customtkinter.CTkFrame(master=self)
+        self.bottom_grid_level.grid(sticky="wesn", padx=10, pady=10)
+        self.bottom_grid_level.grid_columnconfigure(0, weight=1)
+        self.bottom_grid_level.grid_columnconfigure(1, weight=3)
+        self.bottom_grid_level.grid_rowconfigure(0, weight=1)
+
+        # ====================== header settings ======================
+
+        self.left_column = customtkinter.CTkFrame(master=self.bottom_grid_level)
+        self.left_column.grid(row=0, column=0, sticky="wesn", padx=10, pady=10)
+        self.left_column.grid_columnconfigure(0, weight=1)
+        self.left_column.grid_rowconfigure((0, 1, 2, 3, 4, 5), weight=1)
+
+        self.header = customtkinter.CTkFrame(master=self.left_column)
+        self.header.grid(row=0, column=0, sticky="wesn", padx=10, pady=10)
         self.header.grid_columnconfigure((0, 1), weight=1)
         self.select_catalog_button = customtkinter.CTkButton(master=self.header,
                                                              text="Select catalog",
                                                              command=self.select_catalog_event)
 
-        self.select_catalog_button.grid(row=0, column=0, pady=(10, 10), padx=10, sticky="we")
+        self.select_catalog_button.grid(row=0, column=0, pady=(10, 10), padx=10, sticky="wesn")
 
         self.select_catalog_button = customtkinter.CTkButton(master=self.header,
                                                              text="Select file",
                                                              command=self.select_file_event)
-        self.select_catalog_button.grid(row=0, column=1, pady=(10, 10), padx=10, sticky="we")
+        self.select_catalog_button.grid(row=0, column=1, pady=(10, 10), padx=10, sticky="wesn")
 
         # ====================== header settings ======================
 
-        self.text_grid = customtkinter.CTkFrame(master=self)
+        self.text_grid = customtkinter.CTkFrame(master=self.left_column)
         self.text_grid.grid(row=1, column=0, sticky="wesn", padx=10, pady=(10, 0))
         self.text_grid.grid_rowconfigure(0, weight=1)
         self.text_grid.grid_columnconfigure(0, weight=1)
@@ -95,9 +118,9 @@ class App(customtkinter.CTk):
 
         # ====================== select section settings ======================
 
-        self.select_grid = customtkinter.CTkFrame(master=self)
+        self.select_grid = customtkinter.CTkFrame(master=self.left_column)
         self.select_grid.grid(row=2, column=0, sticky="wesn", padx=10, pady=(10, 0))
-        self.checkbox_dict = {}
+
         for index, option_name in enumerate(self.options):
             checkbox = customtkinter.CTkCheckBox(master=self.select_grid, text=f"{option_name}", command=self.check_box_update_event)
             checkbox.grid(row=index // 3, column=index % 3, pady=8, padx=10, sticky="nwe")
@@ -106,7 +129,7 @@ class App(customtkinter.CTk):
 
         # ====================== select section settings ======================
 
-        self.select_version_grid = customtkinter.CTkFrame(master=self)
+        self.select_version_grid = customtkinter.CTkFrame(master=self.left_column)
         self.select_version_grid.grid(row=3, column=0, sticky="wesn", padx=10, pady=(10, 0))
         self.checkbox_version = customtkinter.CTkCheckBox(master=self.select_version_grid, text=f"Old tc version", command=self.check_box_update_event)
         self.checkbox_version.grid(row=1, column=1, pady=10, padx=10, sticky="nwe")
@@ -114,13 +137,27 @@ class App(customtkinter.CTk):
 
         # ====================== footer section settings ======================
 
-        self.footer_grid = customtkinter.CTkFrame(master=self)
+        self.footer_grid = customtkinter.CTkFrame(master=self.left_column)
         self.footer_grid.grid(row=4, column=0, sticky="swe", padx=10, pady=(10, 0))
         self.footer_grid.grid_columnconfigure(0, weight=1)
         self.select_catalog_button = customtkinter.CTkButton(master=self.footer_grid,
                                                              text="PARSE TEST CASE",
                                                              command=self.start_parse)
         self.select_catalog_button.grid(row=0, column=0, pady=(10, 10), padx=10, sticky="wesn")
+
+        # ============================= right column ============================ #
+        self.second_column = customtkinter.CTkFrame(master=self.bottom_grid_level)
+        self.second_column.grid(row=0, column=1, sticky="snwe", padx=(0, 10), pady=(10, 10))
+        self.second_column.grid_columnconfigure(0, weight=1)
+        self.second_column.grid_rowconfigure(0, weight=1)
+
+        # ============================ Text box ================================= #
+        # self.error_grid = customtkinter.CTkFrame(master=self.second_column)
+        # self.text_grid.grid(row=1, column=0, sticky="wesn", padx=10, pady=(10, 0))
+        # self.text_grid.grid_rowconfigure(0, weight=1)
+        # self.text_grid.grid_columnconfigure(0, weight=1)
+        self.error_textbox = customtkinter.CTkTextbox(self.second_column, width=700)
+        self.error_textbox.grid(row=0, column=0, padx=10, pady=(10, 10), sticky="wesn")
 
     def check_box_update_event(self):
         pass
@@ -130,24 +167,34 @@ class App(customtkinter.CTk):
         self.destroy()
 
     def _update_init_file(self):
+        logging.info("Entry")
+        time_start = time.time()
         for key_checkbox, item_checkbox in self.checkbox_dict.items():
             self.SaveOptToCfg(self.configFilePath, section="DEFAULT", option=key_checkbox.lower(), value=str(item_checkbox.get()))
         self.SaveOptToCfg(self.configFilePath, section="DEFAULT", option="last directory", value=str(self.lastDir))
         self.SaveOptToCfg(self.configFilePath, section="DEFAULT", option="tc version", value=str(self.checkbox_version.get()))
         self.SaveOptToCfg(self.configFilePath, section="DEFAULT", option="template directory", value=str(self.live_template_path))
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def select_catalog_event(self):
+        logging.info("Entry")
+        time_start = time.time()
         self.textbox.delete("0.0", "end")
         self.file_to_parse = []
         self.lastDir = filedialog.askdirectory()
         self.file_to_parse = [f"{self.lastDir}/{each.name}" for each in os.scandir(self.lastDir)]
         temp_text = ""
+        logging.debug(f"Selected folder: {self.lastDir}")
+        logging.debug(f"Selected files: {self.file_to_parse}")
         list_files_path = self.file_to_parse
         for each_name in list_files_path:
             temp_text += os.path.split(each_name)[1] + "\n"
         self.textbox.insert("0.0", temp_text)
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def select_file_event(self):
+        logging.info("Entry")
+        time_start = time.time()
         self.textbox.delete("0.0", "end")
         self.file_to_parse = []
         list_files_path = filedialog.askopenfilenames(
@@ -156,57 +203,62 @@ class App(customtkinter.CTk):
         )
         self.lastDir = os.path.split(list_files_path[0])[0]
         self.file_to_parse = list_files_path
+        logging.debug(f"Selected folder: {self.lastDir}")
+        logging.debug(f"Selected files: {self.file_to_parse}")
         temp_text = ""
         for each_name in list_files_path:
             temp_text += os.path.split(each_name)[1] + "\n"
         self.textbox.insert("0.0", temp_text)
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def start_parse(self):
+        logging.info("Entry")
+        time_start = time.time()
         self.errorList = []
         self._update_init_file()
         for file_open_path in self.file_to_parse:
             self.current_file_name = os.path.split(file_open_path)[1]
 
-            if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "template updater", int_return=True):
+            if self.checkbox_dict.get('Template updater').get():
                 self.update_templates(file_open_path)
 
             temp_data_line = []
             with open(file_open_path, "r") as open_file:
                 self.temporary_file = open_file.readlines()
 
-            if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "verify coding", int_return=True):
+            if self.checkbox_dict.get('Verify Coding').get():
                 self.validate_verify_coding()
-            if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "remove unnecessary lines", int_return=True):
+            if self.checkbox_dict.get('Remove unnecessary lines').get():
                 self.remove_unnecessary_empty_lines()
 
             for each_line_no, each_line in enumerate(self.temporary_file, start=1):
                 self.current_line = each_line
                 self.current_line_no = each_line_no
 
-                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "Remove spacebars template", int_return=True):
+                if self.checkbox_dict.get('Remove spacebars template').get():
                     self.remove_unnecessary_white_signs_before_editor()
 
-                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "excessive spacebards", int_return=True):
+                if self.checkbox_dict.get('Excessive Spacebars').get():
                     self.validate_spacebars_in_step()
 
-                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "Indentation step level", int_return=True):
+                if self.checkbox_dict.get('Indentation step level').get():
                     self.validate_indentation_level()
 
-                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "Indentation log level", int_return=True):
+                if self.checkbox_dict.get('Indentation log level').get():
                     self.validate_level_log_indentation()
                     self.validate_whitespaces_in_log()
 
-                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "Step finished with dot", int_return=True):
+                if self.checkbox_dict.get('Step finished with dot').get():
                     self.validate_dot_on_the_end()
 
-                if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "validate requirements", int_return=True):
+                if self.checkbox_dict.get('Validate requirements').get():
                     self.validate_requirement()
 
                 temp_data_line.append(self.current_line)
             self.temporary_file = temp_data_line
 
             # Parse testcase and update steps number
-            if self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "update step level", int_return=True):
+            if self.checkbox_dict.get('Update Step level').get():
                 self.parse_step_level_file()
 
             self.append_step_procedure()
@@ -215,9 +267,12 @@ class App(customtkinter.CTk):
                 open_file.writelines(self.temporary_file)
 
             self._PrintErrorList()
-            print("Parsing finished, world will better now!")
+            logging.info(f"Exit in {time.time() - time_start}")
+            self.error_textbox.insert("end", f"\n\nParsing finished in {time.time() - time_start:.02f}s, world will better now!")
 
     def GetOptionFromCfg(self, cfg_path, section, option, int_return=False):
+        logging.info("Entry")
+        time_start = time.time()
         if os.path.isfile(cfg_path):
             with open(cfg_path) as opened_file:
                 self.config.read_file(opened_file)
@@ -231,13 +286,19 @@ class App(customtkinter.CTk):
                     return None
         else:
             print(f"{self.configFilePath} doesn't exist.")
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def SaveOptToCfg(self, cfg_path, section, option, value):
+        logging.info("Entry")
+        time_start = time.time()
         self.config.set(section, option, value)
         with open(cfg_path, "w") as opened_file:
             self.config.write(opened_file)
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def validate_requirement(self):
+        logging.info("Entry")
+        time_start = time.time()
         line = self.current_line
         if re.search(r'^#* *Req *\(', line):
             if not line.startswith('#'):  # process only not hashed lines
@@ -262,24 +323,36 @@ class App(customtkinter.CTk):
                             [self.current_file_name,
                              self.current_line_no,
                              'Lack quotation mark(s): requirements shall be list of strings.'])
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def validate_spacebars_in_step(self):
-        if self.old_template:
-            temporary_file = re.search("( *Step\()([\"\'].*[\"\'])(\))", self.current_line)
-        else:
-            temporary_file = re.search("( *with Step\()([\"\'].*[\"\'])(, ?\d\):|\):)", self.current_line)
-        temporary_string = ""
-        if temporary_file is not None and len(temporary_file.groups()) > 1:
-            for each_index, each_group in enumerate(temporary_file.groups()):
-                temporary_string += each_group if each_index != 1 else re.sub(" {2,}", " ", each_group)
-            self.current_line = temporary_string + "\n"
+        logging.info("Entry")
+        time_start = time.time()
+        if "#" not in self.current_line:
+            if self.old_template:
+                temporary_file = re.search("( *Step\()([\"\'].*[\"\'])(\))", self.current_line)
+            else:
+                temporary_file = re.search("( *with Step\()([\"\'].*[\"\'])(, ?\d\):|\):)", self.current_line)
+            temporary_string = ""
+            if temporary_file is not None and len(temporary_file.groups()) > 1:
+                for each_index, each_group in enumerate(temporary_file.groups()):
+                    temporary_string += each_group if each_index != 1 else re.sub(" {2,}", " ", each_group)
+                self.current_line = temporary_string + "\n"
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def _PrintErrorList(self):
+        self.error_textbox.delete("0.0", "end")
+        self.error_textbox.insert("end", "Detected issues in testcases:")
+
         if len(self.errorList) > 0:
             for each_error in self.errorList:
-                print(f"File: {each_error[0]},\t line: {each_error[1]},\t fault detected: {each_error[2]}")
+                self.error_textbox.insert("end", f"\n File: {each_error[0]},\t line: {each_error[1]},\t fault detected: {each_error[2]}")
+        else:
+            self.error_textbox.insert("end", "\nAny problem with testcases")
 
     def validate_level_log_indentation(self):
+        logging.info("Entry")
+        time_start = time.time()
         temp_line = self.current_line
         allowed_level_list = [1, 2, 3]
         indentation_log_level = re.match("(\s*Log\([\"\'].*[\"\'],? ?)(\d?)\)", temp_line)
@@ -293,8 +366,11 @@ class App(customtkinter.CTk):
                 self.errorList.append([self.current_file_name,
                                        self.current_line_no,
                                        f"Incorrect Log level, current level: {indentation_log_level}, allowed levels: {allowed_level_list}"])
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def validate_whitespaces_in_log(self):
+        logging.info("Entry")
+        time_start = time.time()
         line = self.current_line
         try:
             line = re.sub(r'Log *\( *" *', 'Log("', line, 1)  # delete needless space chars in "Logs ( " string
@@ -305,17 +381,24 @@ class App(customtkinter.CTk):
                                    self.current_line_no,
                                    ' exception - ' + traceback.format_exc()])
             status = 'NOK'
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def validate_indentation_level(self):
-        temporary_file = re.search("( *)(with Step\([\"\'].*[\"\'])(, ?\d\):|\):)", self.current_line)
-        temporary_string = ""
-        if temporary_file is not None and len(temporary_file.groups()) == 3:
-            indentation_no = (len(temporary_file.groups()[0]) // 4) + 1
-            for each_index, each_group in enumerate(temporary_file.groups()[:-1]):
-                temporary_string += (" " * ((indentation_no - 1) * 4)) if each_index == 0 else each_group
-            self.current_line = temporary_string + (f", {indentation_no}):" if indentation_no > 1 else "):") + "\n"
+        logging.info("Entry")
+        time_start = time.time()
+        if "#" not in self.current_line:
+            temporary_file = re.search("( *)(with Step\([\"\'].*[\"\'])(, ?\d\):|\):)", self.current_line)
+            temporary_string = ""
+            if temporary_file is not None and len(temporary_file.groups()) == 3:
+                indentation_no = (len(temporary_file.groups()[0]) // 4) + 1
+                for each_index, each_group in enumerate(temporary_file.groups()[:-1]):
+                    temporary_string += (" " * ((indentation_no - 1) * 4)) if each_index == 0 else each_group
+                self.current_line = temporary_string + (f", {indentation_no}):" if indentation_no > 1 else "):") + "\n"
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def validate_verify_coding(self):
+        logging.info("Entry")
+        time_start = time.time()
         # VALIDATION OF CODING: EXPECTED UTF-8
         temp_file_data = []
         if len(self.temporary_file) > 0:
@@ -325,25 +408,35 @@ class App(customtkinter.CTk):
                 if self.flag_fix:
                     temp_file_data.append("# -*- coding: utf-8 -*-\n")
                     self.temporary_file = temp_file_data + self.temporary_file
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def validate_dot_on_the_end(self):
-        temporary_file = re.search("( *.*Step\([\"\'].*\n*.*)(\.)(\".*\))", self.current_line)
-        if temporary_file is not None and len(temporary_file.groups()) == 3:
-            temporary_string = ""
-            for each_index, each_line in enumerate(temporary_file.groups()):
-                if each_index != 1:
-                    temporary_string += each_line
-            self.current_line = temporary_string + "\n"
+        logging.info("Entry")
+        time_start = time.time()
+        if "#" not in self.current_line:
+            temporary_file = re.search("( *.*Step\([\"\'].*\n*.*)(\.)(\".*\))", self.current_line)
+            if temporary_file is not None and len(temporary_file.groups()) == 3:
+                temporary_string = ""
+                for each_index, each_line in enumerate(temporary_file.groups()):
+                    if each_index != 1:
+                        temporary_string += each_line
+                self.current_line = temporary_string + "\n"
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def remove_unnecessary_empty_lines(self):
+        logging.info("Entry")
+        time_start = time.time()
         if len(self.temporary_file) > 0:
             temporary_file = ""
             for each_line in self.temporary_file:
                 temporary_file += each_line
-            temporary_file = re.sub("\n{2,}", "\n\n", temporary_file)
+            temporary_file = re.sub("\n\s*\n", "\n\n", temporary_file)
             self.temporary_file = [each_line + "\n" for each_line in temporary_file.split("\n")]
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def parse_step_level_file(self, ):
+        logging.info("Entry")
+        time_start = time.time()
         MAX_STEP_LEVEL = 3
         tcLines = self.temporary_file
 
@@ -398,16 +491,22 @@ class App(customtkinter.CTk):
             else:
                 parsedLines.append(line)
         self.temporary_file = parsedLines
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def remove_unnecessary_white_signs_before_editor(self):
+        logging.info("Entry")
+        time_start = time.time()
         temporary_file = re.search("[ ]+#[\s]?(<[/]?editor)(.*)", self.current_line)
         if temporary_file is not None:
             temporary_string = "# "
             for each_index, each_line in enumerate(temporary_file.groups()):
                 temporary_string += each_line
             self.current_line = temporary_string + "\n"
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def append_step_procedure(self):
+        logging.info("Entry")
+        time_start = time.time()
         temp_file_lines = self.temporary_file[:]
         start_procedure_list = None
         procedure_flag = False
@@ -432,14 +531,16 @@ class App(customtkinter.CTk):
             copy_temp_file = temp_file_lines[:procedure_start] + self.procedure_line + temp_file_lines[procedure_start:] + ["\n"]
         else:
             if log_end is not None:
-                procedure_start = log_end+1
-                copy_temp_file =  temp_file_lines[:procedure_start] + ["\n"] + self.procedure_line + temp_file_lines[procedure_start:] + ["\n"]
+                procedure_start = log_end + 1
+                copy_temp_file = temp_file_lines[:procedure_start] + ["\n"] + self.procedure_line + temp_file_lines[procedure_start:] + ["\n"]
             else:
                 copy_temp_file = temp_file_lines[:]
         self.temporary_file = copy_temp_file[:]
+        logging.info(f"Exit in {time.time() - time_start}")
 
     def update_templates(self, tc_path):
-
+        logging.info("Entry")
+        time_start = time.time()
         xml_path = self.GetOptionFromCfg(cfg_path=self.configFilePath, section="DEFAULT", option="template directory")
 
         file = open(tc_path, "r")
@@ -510,6 +611,8 @@ class App(customtkinter.CTk):
         file = open(tc_path, "w")
         file.write(script)
         file.close()
+        logging.info(f"Exit in {time.time() - time_start}")
+
 
 if __name__ == '__main__':
     app = App()
