@@ -11,6 +11,8 @@ import logging
 import time
 
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
+customtkinter.set_widget_scaling(0.90)
+customtkinter.set_window_scaling(0.90)
 
 
 class App(customtkinter.CTk):
@@ -32,7 +34,7 @@ class App(customtkinter.CTk):
     flag_fix = True
     current_file = ""
     WIDTH = 1400
-    HEIGHT = 800
+    HEIGHT = 900
     current_line = ""
     current_line_no = 1
     current_file_name = ""
@@ -86,15 +88,22 @@ class App(customtkinter.CTk):
         self.bottom_grid_level.grid_columnconfigure(1, weight=3)
         self.bottom_grid_level.grid_rowconfigure(0, weight=1)
 
-        # ====================== header settings ======================
+        # =========================== EMPTY LINE ======================
 
         self.left_column = customtkinter.CTkFrame(master=self.bottom_grid_level)
         self.left_column.grid(row=0, column=0, sticky="wesn", padx=10, pady=10)
         self.left_column.grid_columnconfigure(0, weight=1)
-        self.left_column.grid_rowconfigure((0, 1, 2, 3, 4, 5), weight=1)
+        self.left_column.grid_rowconfigure((1, 2, 3, 4, 5, 6, 7), weight=1)
 
-        self.header = customtkinter.CTkFrame(master=self.left_column)
-        self.header.grid(row=0, column=0, sticky="wesn", padx=10, pady=10)
+        # =========================== EMPTY LINE ======================
+        left_row_index = 0
+        self.top_left_empty_line = customtkinter.CTkFrame(master=self.left_column, height=1)
+        self.top_left_empty_line.grid(row=left_row_index, column=0)
+        #
+        # # ====================== header settings ======================
+        left_row_index += 1
+        self.header = customtkinter.CTkFrame(master=self.left_column, height=50)
+        self.header.grid(row=left_row_index, column=0, sticky="we", padx=10, pady=(10, 0))
         self.header.grid_columnconfigure((0, 1), weight=1)
         self.select_catalog_button = customtkinter.CTkButton(master=self.header,
                                                              text="Select catalog",
@@ -108,18 +117,36 @@ class App(customtkinter.CTk):
         self.select_catalog_button.grid(row=0, column=1, pady=(10, 10), padx=10, sticky="wesn")
 
         # ====================== header settings ======================
-
-        self.text_grid = customtkinter.CTkFrame(master=self.left_column)
-        self.text_grid.grid(row=1, column=0, sticky="wesn", padx=10, pady=(10, 0))
+        left_row_index += 1
+        self.text_grid = customtkinter.CTkFrame(master=self.left_column, height=200)
+        self.text_grid.grid(row=left_row_index, column=0, sticky="wesn", padx=10, pady=(10, 0))
         self.text_grid.grid_rowconfigure(0, weight=1)
         self.text_grid.grid_columnconfigure(0, weight=1)
         self.textbox = customtkinter.CTkTextbox(self.text_grid)
         self.textbox.grid(row=0, column=0, padx=10, pady=(10, 10), sticky="wesn")
 
+        # ====================== header settings ======================
+
+        left_row_index += 1
+        self.template_grid = customtkinter.CTkFrame(master=self.left_column, height=100)
+        self.template_grid.grid(row=left_row_index, column=0, sticky="we", padx=10, pady=(10, 0))
+        self.template_grid.grid_columnconfigure((0, 1), weight=1)
+
+        self.template_label = customtkinter.CTkLabel(master=self.template_grid, text="Live Template", compound="left")
+        self.template_label.grid(row=0, column=0, sticky="w", padx=30, pady=10)
+
+        self.template_button = customtkinter.CTkButton(master=self.template_grid, text="Select template path", command=self.select_template_file_event)
+        self.template_button.grid(row=0, column=1, sticky="we", padx=10, pady=10)
+
+        self.template_textbox = customtkinter.CTkTextbox(self.template_grid, height=20, width=100, state="disabled")
+        self.template_textbox.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="we")
+        self.template_textbox.grid_configure(columnspan=2)
+
         # ====================== select section settings ======================
 
-        self.select_grid = customtkinter.CTkFrame(master=self.left_column)
-        self.select_grid.grid(row=2, column=0, sticky="wesn", padx=10, pady=(10, 0))
+        left_row_index += 1
+        self.select_grid = customtkinter.CTkFrame(master=self.left_column, height=300)
+        self.select_grid.grid(row=left_row_index, column=0, sticky="wesn", padx=10, pady=(10, 0))
 
         for index, option_name in enumerate(self.options):
             checkbox = customtkinter.CTkCheckBox(master=self.select_grid, text=f"{option_name}", command=self.check_box_update_event)
@@ -129,21 +156,28 @@ class App(customtkinter.CTk):
 
         # ====================== select section settings ======================
 
-        self.select_version_grid = customtkinter.CTkFrame(master=self.left_column)
-        self.select_version_grid.grid(row=3, column=0, sticky="wesn", padx=10, pady=(10, 0))
-        self.checkbox_version = customtkinter.CTkCheckBox(master=self.select_version_grid, text=f"Old tc version", command=self.check_box_update_event)
+        left_row_index += 1
+        self.select_version_grid = customtkinter.CTkFrame(master=self.left_column, height=50)
+        self.select_version_grid.grid(row=left_row_index, column=0, sticky="wesn", padx=10, pady=(10, 0))
+        self.checkbox_version = customtkinter.CTkCheckBox(master=self.select_version_grid, text=f"New tc version", command=self.check_box_update_event)
         self.checkbox_version.grid(row=1, column=1, pady=10, padx=10, sticky="nwe")
         self.checkbox_version.select() if int(self.GetOptionFromCfg(self.configFilePath, section="DEFAULT", option="tc version")) else self.checkbox_version.deselect()
 
         # ====================== footer section settings ======================
 
-        self.footer_grid = customtkinter.CTkFrame(master=self.left_column)
-        self.footer_grid.grid(row=4, column=0, sticky="swe", padx=10, pady=(10, 0))
+        left_row_index += 1
+        self.footer_grid = customtkinter.CTkFrame(master=self.left_column, height=50)
+        self.footer_grid.grid(row=left_row_index, column=0, sticky="swe", padx=10, pady=(10, 0))
         self.footer_grid.grid_columnconfigure(0, weight=1)
         self.select_catalog_button = customtkinter.CTkButton(master=self.footer_grid,
                                                              text="PARSE TEST CASE",
                                                              command=self.start_parse)
         self.select_catalog_button.grid(row=0, column=0, pady=(10, 10), padx=10, sticky="wesn")
+
+        # =========================== EMPTY LINE ======================
+        left_row_index += 1
+        self.bottom_left_empty_line = customtkinter.CTkFrame(master=self.left_column, height=1)
+        self.bottom_left_empty_line.grid(row=left_row_index, column=0)
 
         # ============================= right column ============================ #
         self.second_column = customtkinter.CTkFrame(master=self.bottom_grid_level)
@@ -209,6 +243,21 @@ class App(customtkinter.CTk):
         for each_name in list_files_path:
             temp_text += os.path.split(each_name)[1] + "\n"
         self.textbox.insert("0.0", temp_text)
+        logging.info(f"Exit in {time.time() - time_start}")
+
+    def select_template_file_event(self):
+        logging.info("Entry")
+        time_start = time.time()
+        self.template_textbox.delete("0.0", "end")
+        list_files_path = filedialog.askopenfilenames(
+            title="Select file",
+            filetypes=(("python file", "*.py"), ("text file", "*.txt"), ("All files", "*.*"),)
+        )
+        self.live_template_path = os.path.split(list_files_path[0])[0]
+        logging.debug(f"Selected folder: {list_files_path[0]}")
+        self.template_textbox.configure(state="normal")
+        self.template_textbox.insert("0.0", f"{list_files_path[0]}")
+        self.template_textbox.configure(state="disabled")
         logging.info(f"Exit in {time.time() - time_start}")
 
     def start_parse(self):
