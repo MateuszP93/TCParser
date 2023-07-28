@@ -138,7 +138,10 @@ class App(customtkinter.CTk):
         self.template_button = customtkinter.CTkButton(master=self.template_grid, text="Select template path", command=self.select_template_file_event)
         self.template_button.grid(row=0, column=1, sticky="we", padx=10, pady=10)
 
-        self.template_textbox = customtkinter.CTkTextbox(self.template_grid, height=20, width=100, state="disabled")
+        self.template_textbox = customtkinter.CTkTextbox(self.template_grid, height=20, width=100)
+        self.template_textbox.delete("0.0", "end")
+        self.template_textbox.insert("0.0", f"{self.live_template_path}")
+        self.template_textbox.configure(state="disabled")
         self.template_textbox.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="we")
         self.template_textbox.grid_configure(columnspan=2)
 
@@ -215,7 +218,7 @@ class App(customtkinter.CTk):
         time_start = time.time()
         self.textbox.delete("0.0", "end")
         self.file_to_parse = []
-        self.lastDir = filedialog.askdirectory()
+        self.lastDir = filedialog.askdirectory(initialdir=self.lastDir)
         self.file_to_parse = [f"{self.lastDir}/{each.name}" for each in os.scandir(self.lastDir)]
         temp_text = ""
         logging.debug(f"Selected folder: {self.lastDir}")
@@ -233,31 +236,36 @@ class App(customtkinter.CTk):
         self.file_to_parse = []
         list_files_path = filedialog.askopenfilenames(
             title="Select file",
-            filetypes=(("python file", "*.py"), ("text file", "*.txt"), ("All files", "*.*"),)
+            filetypes=(("python file", "*.py"), ("text file", "*.txt"), ("All files", "*.*"),),
+            initialdir=self.lastDir
         )
-        self.lastDir = os.path.split(list_files_path[0])[0]
-        self.file_to_parse = list_files_path
-        logging.debug(f"Selected folder: {self.lastDir}")
-        logging.debug(f"Selected files: {self.file_to_parse}")
-        temp_text = ""
-        for each_name in list_files_path:
-            temp_text += os.path.split(each_name)[1] + "\n"
-        self.textbox.insert("0.0", temp_text)
+        if isinstance(list_files_path, tuple):
+            self.lastDir = os.path.split(list_files_path[0])[0]
+            self.file_to_parse = list_files_path
+            logging.debug(f"Selected folder: {self.lastDir}")
+            logging.debug(f"Selected files: {self.file_to_parse}")
+            temp_text = ""
+            for each_name in list_files_path:
+                temp_text += os.path.split(each_name)[1] + "\n"
+            self.textbox.insert("0.0", temp_text)
         logging.info(f"Exit in {time.time() - time_start}")
 
     def select_template_file_event(self):
         logging.info("Entry")
         time_start = time.time()
+        self.template_textbox.configure(state="normal")
         self.template_textbox.delete("0.0", "end")
         list_files_path = filedialog.askopenfilenames(
             title="Select file",
-            filetypes=(("python file", "*.py"), ("text file", "*.txt"), ("All files", "*.*"),)
+            filetypes=(("xml file", "*.xml"), ("text file", "*.txt"), ("All files", "*.*"),),
+            initialdir=self.live_template_path
         )
-        self.live_template_path = os.path.split(list_files_path[0])[0]
-        logging.debug(f"Selected folder: {list_files_path[0]}")
-        self.template_textbox.configure(state="normal")
-        self.template_textbox.insert("0.0", f"{list_files_path[0]}")
-        self.template_textbox.configure(state="disabled")
+        if isinstance(list_files_path, tuple):
+            self.live_template_path = list_files_path[0]
+            logging.debug(f"Selected file: {list_files_path[0]}")
+
+            self.template_textbox.insert("0.0", f"{list_files_path[0]}")
+            self.template_textbox.configure(state="disabled")
         logging.info(f"Exit in {time.time() - time_start}")
 
     def start_parse(self):
@@ -590,7 +598,7 @@ class App(customtkinter.CTk):
     def update_templates(self, tc_path):
         logging.info("Entry")
         time_start = time.time()
-        xml_path = self.GetOptionFromCfg(cfg_path=self.configFilePath, section="DEFAULT", option="template directory")
+        xml_path = self.live_template_path
 
         file = open(tc_path, "r")
         script = file.read()
