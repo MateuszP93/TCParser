@@ -7,8 +7,10 @@ import re
 import json
 from xml.dom import minidom
 from pprint import pprint as pp
+import shutil
 import logging
 import time
+from datetime import datetime
 
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
 customtkinter.set_widget_scaling(0.90)
@@ -42,6 +44,13 @@ class App(customtkinter.CTk):
     errorList = []  # line number, error description
     procedure_line = ""
     checkbox_dict = {}
+    current_file_path = ""
+    backup_path = os.path.expanduser(r"~\Documents") + "\\tc_parser_backup"
+
+    make_backup = None
+
+
+
     options = [
         "Update Step level",
         "Verify Coding",
@@ -71,7 +80,6 @@ class App(customtkinter.CTk):
         "Template updater"]
 
     def __init__(self):
-
         self.lastDir = self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "last directory")
         self.live_template_path = self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "template directory")
         super().__init__()
@@ -145,6 +153,27 @@ class App(customtkinter.CTk):
         self.template_textbox.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="we")
         self.template_textbox.grid_configure(columnspan=2)
 
+        # ====================== backup settings ======================
+
+        left_row_index += 1
+        self.backup_grid = customtkinter.CTkFrame(master=self.left_column, height=100)
+        self.backup_grid.grid(row=left_row_index, column=0, sticky="we", padx=10, pady=(10, 0))
+        self.backup_grid.grid_columnconfigure((0, 1), weight=1)
+
+        self.backup_label = customtkinter.CTkLabel(master=self.backup_grid, text="Backup path", compound="left")
+        self.backup_label.grid(row=0, column=0, sticky="w", padx=30, pady=10)
+
+        self.backup_button = customtkinter.CTkButton(master=self.backup_grid, text="Select backup path", command=self.select_backup_file_event, state="disabled")
+        self.backup_button.grid(row=0, column=1, sticky="we", padx=10, pady=10)
+
+        self.backup_textbox = customtkinter.CTkTextbox(self.backup_grid, height=20, width=100)
+        self.backup_textbox.configure(state="normal")
+        self.backup_textbox.delete("0.0", "end")
+        self.backup_textbox.insert("0.0", f"{self.backup_path}")
+        self.backup_textbox.configure(state="disabled")
+        self.backup_textbox.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="we")
+        self.backup_textbox.grid_configure(columnspan=2)
+
         # ====================== select section settings ======================
 
         left_row_index += 1
@@ -165,6 +194,9 @@ class App(customtkinter.CTk):
         self.checkbox_version = customtkinter.CTkCheckBox(master=self.select_version_grid, text=f"New tc version", command=self.check_box_update_event)
         self.checkbox_version.grid(row=1, column=1, pady=10, padx=10, sticky="nwe")
         self.checkbox_version.select() if int(self.GetOptionFromCfg(self.configFilePath, section="DEFAULT", option="tc version")) else self.checkbox_version.deselect()
+
+        self.make_backup_checkbox = customtkinter.CTkCheckBox(master=self.select_version_grid, text=f"Backup file")
+        self.make_backup_checkbox.grid(row=1, column=2, pady=10, padx=10, sticky="nwe")
 
         # ====================== footer section settings ======================
 
@@ -196,6 +228,8 @@ class App(customtkinter.CTk):
         self.error_textbox = customtkinter.CTkTextbox(self.second_column, width=700)
         self.error_textbox.grid(row=0, column=0, padx=10, pady=(10, 10), sticky="wesn")
 
+
+
     def check_box_update_event(self):
         pass
 
@@ -212,6 +246,13 @@ class App(customtkinter.CTk):
         self.SaveOptToCfg(self.configFilePath, section="DEFAULT", option="tc version", value=str(self.checkbox_version.get()))
         self.SaveOptToCfg(self.configFilePath, section="DEFAULT", option="template directory", value=str(self.live_template_path))
         logging.info(f"Exit in {time.time() - time_start}")
+
+    def create_backup(self):
+        if self.make_backup:
+            destination_path = self.backup_path + f"\\{datetime.today()}".replace("-", "_").replace(" ", "__").replace(":", "_").split(".")[0]
+            if not os.path.isdir(destination_path):
+                os.makedirs(destination_path)
+            shutil.copy(self.current_file_path, destination_path+f"\\{self.current_file_name}")
 
     def select_catalog_event(self):
         logging.info("Entry")
@@ -268,6 +309,16 @@ class App(customtkinter.CTk):
             self.template_textbox.configure(state="disabled")
         logging.info(f"Exit in {time.time() - time_start}")
 
+    def select_backup_file_event(self):
+        logging.info("Entry")
+        time_start = time.time()
+        self.backup_textbox.delete("0.0", "end")
+        self.backup_textbox.configure(state="normal")
+        self.backup_path = filedialog.askdirectory(initialdir=self.backup_path)
+        self.backup_textbox.insert("0.0", self.backup_path)
+        self.backup_textbox.configure(state="disabled")
+        logging.info(f"Exit in {time.time() - time_start}")
+
     def start_parse(self):
         logging.info("Entry")
         time_start = time.time()
@@ -275,6 +326,9 @@ class App(customtkinter.CTk):
         self._update_init_file()
         for file_open_path in self.file_to_parse:
             self.current_file_name = os.path.split(file_open_path)[1]
+            self.current_file_path = file_open_path
+
+            self.create_backup()
 
             if self.checkbox_dict.get('Template updater').get():
                 self.update_templates(file_open_path)
