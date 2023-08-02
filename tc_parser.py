@@ -1,3 +1,4 @@
+import ast
 import customtkinter
 import traceback
 import os
@@ -47,10 +48,10 @@ class App(customtkinter.CTk):
     current_file_path = ""
     backup_path = os.path.expanduser(r"~\Documents") + "\\tc_parser_backup"
 
+    # =========== Checkbox variable ============== #
     make_backup = None
-
-
-
+    new_testcase_version = None
+    apply_fix = None
     options = [
         "Update Step level",
         "Verify Coding",
@@ -59,25 +60,26 @@ class App(customtkinter.CTk):
         "Indentation step level",
         "Indentation log level",
         "Step finished with dot",
+
+        "Remove spacebars in live template tag",
         "Validate requirements",
-        "Remove spacebars template",
-
-        "Verify ASCII chars range",
-        "Validation of headers",
-        "Use of single quotes",
-        "Not closed quotes",
-        "Variables in Steps",
-
-        "Not closed backets",
-        "Binary operators correctness",
-        "Semicolor termination",
-        "Check imports",
-        "Line length < 200",
-        "While loop",
-        "Bad practise naming",
-        "Tabs not spaces",
-        "General indentation",
-        "Template updater"]
+        "Validate line length",
+        # "Verify ASCII chars range",
+        # "Validation of headers",
+        # "Use of single quotes",
+        # "Not closed quotes",
+        # "Variables in Steps",
+        #
+        # "Not closed backets",
+        # "Binary operators correctness",
+        # "Semicolor termination",
+        # "Check imports",
+        # "Line length < 200",
+        # "While loop",
+        # "Bad practise naming",
+        # "Tabs not spaces",
+        # "General indentation",
+        "Update live template"]
 
     def __init__(self):
         self.lastDir = self.GetOptionFromCfg(self.configFilePath, "DEFAULT", "last directory")
@@ -191,12 +193,19 @@ class App(customtkinter.CTk):
         left_row_index += 1
         self.select_version_grid = customtkinter.CTkFrame(master=self.left_column, height=50)
         self.select_version_grid.grid(row=left_row_index, column=0, sticky="wesn", padx=10, pady=(10, 0))
-        self.checkbox_version = customtkinter.CTkCheckBox(master=self.select_version_grid, text=f"New tc version", command=self.check_box_update_event)
+        self.new_testcase_version = customtkinter.BooleanVar()
+        self.checkbox_version = customtkinter.CTkCheckBox(master=self.select_version_grid, text=f"New tc version", variable=self.new_testcase_version, command=self.check_box_update_event)
         self.checkbox_version.grid(row=1, column=1, pady=10, padx=10, sticky="nwe")
         self.checkbox_version.select() if int(self.GetOptionFromCfg(self.configFilePath, section="DEFAULT", option="tc version")) else self.checkbox_version.deselect()
 
-        self.make_backup_checkbox = customtkinter.CTkCheckBox(master=self.select_version_grid, text=f"Backup file")
+        self.make_backup = customtkinter.BooleanVar()
+        self.make_backup_checkbox = customtkinter.CTkCheckBox(master=self.select_version_grid, text=f"Make backup", variable=self.make_backup)
         self.make_backup_checkbox.grid(row=1, column=2, pady=10, padx=10, sticky="nwe")
+
+        self.apply_fix = customtkinter.BooleanVar()
+        self.apply_fix_checkbox = customtkinter.CTkCheckBox(master=self.select_version_grid, text=f"Apply fix", variable=self.apply_fix)
+        self.apply_fix_checkbox.select() if self.GetOptionFromCfg(self.configFilePath, section="DEFAULT", option="apply fix") else self.apply_fix_checkbox.deselect()
+        self.apply_fix_checkbox.grid(row=1, column=3, pady=10, padx=10, sticky="nwe")
 
         # ====================== footer section settings ======================
 
@@ -228,8 +237,6 @@ class App(customtkinter.CTk):
         self.error_textbox = customtkinter.CTkTextbox(self.second_column, width=700)
         self.error_textbox.grid(row=0, column=0, padx=10, pady=(10, 10), sticky="wesn")
 
-
-
     def check_box_update_event(self):
         pass
 
@@ -245,14 +252,15 @@ class App(customtkinter.CTk):
         self.SaveOptToCfg(self.configFilePath, section="DEFAULT", option="last directory", value=str(self.lastDir))
         self.SaveOptToCfg(self.configFilePath, section="DEFAULT", option="tc version", value=str(self.checkbox_version.get()))
         self.SaveOptToCfg(self.configFilePath, section="DEFAULT", option="template directory", value=str(self.live_template_path))
+        self.SaveOptToCfg(self.configFilePath, section="DEFAULT", option="apply fix", value=str(self.apply_fix.get()))
         logging.info(f"Exit in {time.time() - time_start}")
 
     def create_backup(self):
-        if self.make_backup:
+        if self.make_backup.get():
             destination_path = self.backup_path + f"\\{datetime.today()}".replace("-", "_").replace(" ", "__").replace(":", "_").split(".")[0]
             if not os.path.isdir(destination_path):
                 os.makedirs(destination_path)
-            shutil.copy(self.current_file_path, destination_path+f"\\{self.current_file_name}")
+            shutil.copy(self.current_file_path, destination_path + f"\\{self.current_file_name}")
 
     def select_catalog_event(self):
         logging.info("Entry")
@@ -330,7 +338,7 @@ class App(customtkinter.CTk):
 
             self.create_backup()
 
-            if self.checkbox_dict.get('Template updater').get():
+            if self.checkbox_dict.get('Update live template').get():
                 self.update_templates(file_open_path)
 
             temp_data_line = []
@@ -346,7 +354,7 @@ class App(customtkinter.CTk):
                 self.current_line = each_line
                 self.current_line_no = each_line_no
 
-                if self.checkbox_dict.get('Remove spacebars template').get():
+                if self.checkbox_dict.get('Remove spacebars in live template tag').get():
                     self.remove_unnecessary_white_signs_before_editor()
 
                 if self.checkbox_dict.get('Excessive Spacebars').get():
@@ -364,6 +372,9 @@ class App(customtkinter.CTk):
 
                 if self.checkbox_dict.get('Validate requirements').get():
                     self.validate_requirement()
+
+                if self.checkbox_dict.get("Validate line length").get():
+                    self.validate_length_line()
 
                 temp_data_line.append(self.current_line)
             self.temporary_file = temp_data_line
@@ -388,10 +399,14 @@ class App(customtkinter.CTk):
             with open(cfg_path) as opened_file:
                 self.config.read_file(opened_file)
                 if self.config.has_option(section, option):
-                    if int_return:
-                        return int(self.config.get(section, option))
-                    else:
+                    try:
+                        return ast.literal_eval(self.config.get(section, option))
+                    except:
                         return self.config.get(section, option)
+                    # if int_return:
+                    #     return ast.literal_eval(self.config.get(section, option))
+                    # else:
+                    #     return self.config.get(section, option)
                 else:
                     print(f"option: {option} in section {section} doesn't exist")
                     return None
@@ -440,10 +455,10 @@ class App(customtkinter.CTk):
         logging.info("Entry")
         time_start = time.time()
         if "#" not in self.current_line:
-            if self.old_template:
-                temporary_file = re.search("( *Step\()([\"\'].*[\"\'])(\))", self.current_line)
-            else:
+            if self.new_testcase_version.get():
                 temporary_file = re.search("( *with Step\()([\"\'].*[\"\'])(, ?\d\):|\):)", self.current_line)
+            else:
+                temporary_file = re.search("( *Step\()([\"\'].*[\"\'])(\))", self.current_line)
             temporary_string = ""
             if temporary_file is not None and len(temporary_file.groups()) > 1:
                 for each_index, each_group in enumerate(temporary_file.groups()):
@@ -486,7 +501,22 @@ class App(customtkinter.CTk):
         try:
             line = re.sub(r'Log *\( *" *', 'Log("', line, 1)  # delete needless space chars in "Logs ( " string
             line = re.sub(r' *" *\) *$', '")', line, 1)  # delete needless space chars in " ) " string
-            self.current_line = line
+            temp_data = re.search("( *Log\() *([\"\'].*[\"\'])(, *\d\)|\))", line)
+            if temp_data is not None:
+                temp_data = list(temp_data.groups())
+                temp_data[1] = re.sub(" {2,}", " ", temp_data[1])
+                line = "".join(temp_data+["\n"])
+                if self.apply_fix.get():
+                    if line != self.current_line:
+                        self.current_line = line
+                        self.errorList.append([self.current_file_name,
+                                               self.current_line_no,
+                                               f"Removed unnecessary whitespaces in Log()"])
+                else:
+                    if line != self.current_line:
+                        self.errorList.append([self.current_file_name,
+                                               self.current_line_no,
+                                               f"Unnecessary whitespaces in Log()"])
         except:
             self.errorList.append([self.current_file_name,
                                    self.current_line_no,
@@ -507,6 +537,12 @@ class App(customtkinter.CTk):
                 self.current_line = temporary_string + (f", {indentation_no}):" if indentation_no > 1 else "):") + "\n"
         logging.info(f"Exit in {time.time() - time_start}")
 
+    def validate_length_line(self):
+        if len(self.current_line) > 150:
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   f"Line length is longer than limit. Recommended number of char in line is 120"])
+
     def validate_verify_coding(self):
         logging.info("Entry")
         time_start = time.time()
@@ -514,11 +550,16 @@ class App(customtkinter.CTk):
         temp_file_data = []
         if len(self.temporary_file) > 0:
             if r"# -*- coding: utf-8 -*-" not in self.temporary_file[0]:
-                if self.flag_print:
-                    print("File:", self.current_file, "\tIn first line coding utf-8 is missing, expected: # -*- coding: utf-8 -*-")
-                if self.flag_fix:
+                if self.apply_fix.get():
                     temp_file_data.append("# -*- coding: utf-8 -*-\n")
                     self.temporary_file = temp_file_data + self.temporary_file
+                    self.errorList.append([self.current_file_name,
+                                           0,
+                                           f"Added line first line: # -*- coding: utf-8 -*-"])
+                else:
+                    self.errorList.append([self.current_file_name,
+                                           0,
+                                           f"Lack of coding description in first line. # -*- coding: utf-8 -*-"])
         logging.info(f"Exit in {time.time() - time_start}")
 
     def validate_dot_on_the_end(self):
@@ -568,8 +609,9 @@ class App(customtkinter.CTk):
                         level = 1
                         levelStr = ''
                     if level > MAX_STEP_LEVEL:
-                        self.errorList.append(
-                            [lineNumber, ' - wrong level value: level parameter shall be one of integers 1, 2 or 3.'])
+                        self.errorList.append([self.current_file_name,
+                                               lineNumber,
+                                               f"Wrong level value: level parameter shall be one of integers 1, 2 or 3."])
                         status = 'NOK'
                     else:
                         text = ' ' + re.search(r'"[ \d.]*(.*?) *"', line).groups()[0]
@@ -584,20 +626,24 @@ class App(customtkinter.CTk):
                                 stepNumber[i] = 0
                         if OldTestCaseStyle:
                             if line.startswith("Step("):
-                                print(f"You have selected New TC's ABC model, line: {lineNumber} "
-                                      "Incorrect naming, use 'with Step(' in your TC's instead")
+                                self.errorList.append([self.current_file_name,
+                                                       lineNumber,
+                                                       f"You selected New TC's model, use 'with Step(' in your TC's instead"])
                             else:
                                 line = indent + 'with Step("' + stepText + text + '"' + levelStr + '):\n'
                         else:
                             if line.startswith("with Step(") or line.startswith("    "):
-                                print(f"You have selected OLD TC's model, line: {lineNumber} "
-                                      "Incorrect naming, use 'Step(' in your TC's instead")
+                                self.errorList.append([self.current_file_name,
+                                                       lineNumber,
+                                                       f"You selected OLD TC's model, use 'Step(' in your TC's instead"])
                             else:
                                 line = indent + 'Step("' + stepText + text + '"' + levelStr + ')\n'
                         self.procedure_line.append('##    ' + stepText + text + '\n')
                         parsedLines.append(line)
                 except:
-                    self.errorList.append([lineNumber, ' exception - ' + traceback.format_exc()])
+                    self.errorList.append([self.current_file_name,
+                                           lineNumber,
+                                           f" exception - {traceback.format_exc()}"])
                     status = 'NOK'
             else:
                 parsedLines.append(line)
@@ -673,8 +719,6 @@ class App(customtkinter.CTk):
             exit(1)
         if not start_tags_no:
             print("No tags: skip")
-            # continue
-            # exit(0)
 
         start_tags = []
         end_tags = []
