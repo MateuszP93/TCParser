@@ -64,6 +64,7 @@ class App(customtkinter.CTk):
         "Remove spacebars in live template tag",
         "Validate requirements",
         "Validate line length",
+        "Bad practise naming",
         # "Verify ASCII chars range",
         # "Validation of headers",
         # "Use of single quotes",
@@ -76,7 +77,7 @@ class App(customtkinter.CTk):
         # "Check imports",
         # "Line length < 200",
         # "While loop",
-        # "Bad practise naming",
+
         # "Tabs not spaces",
         # "General indentation",
         "Update live template"]
@@ -367,6 +368,9 @@ class App(customtkinter.CTk):
                     self.validate_level_log_indentation()
                     self.validate_whitespaces_in_log()
 
+                if self.checkbox_dict.get('Bad practise naming').get():
+                    self.validate_bad_practise_naming()
+
                 if self.checkbox_dict.get('Step finished with dot').get():
                     self.validate_dot_on_the_end()
 
@@ -392,7 +396,7 @@ class App(customtkinter.CTk):
             logging.info(f"Exit in {time.time() - time_start}")
             self.error_textbox.insert("end", f"\n\nParsing finished in {time.time() - time_start:.02f}s, world will better now!")
 
-    def GetOptionFromCfg(self, cfg_path, section, option, int_return=False):
+    def GetOptionFromCfg(self, cfg_path, section, option):
         logging.info("Entry")
         time_start = time.time()
         if os.path.isfile(cfg_path):
@@ -499,13 +503,13 @@ class App(customtkinter.CTk):
         time_start = time.time()
         line = self.current_line
         try:
-            line = re.sub(r'Log *\( *" *', 'Log("', line, 1)  # delete needless space chars in "Logs ( " string
+            line = re.sub(r'Log *\( *" *', 'Log("', line, 1)  # delete needless space chars in "Logs  " string
             line = re.sub(r' *" *\) *$', '")', line, 1)  # delete needless space chars in " ) " string
             temp_data = re.search("( *Log\() *([\"\'].*[\"\'])(, *\d\)|\))", line)
             if temp_data is not None:
                 temp_data = list(temp_data.groups())
                 temp_data[1] = re.sub(" {2,}", " ", temp_data[1])
-                line = "".join(temp_data+["\n"])
+                line = "".join(temp_data + ["\n"])
                 if self.apply_fix.get():
                     if line != self.current_line:
                         self.current_line = line
@@ -542,6 +546,72 @@ class App(customtkinter.CTk):
             self.errorList.append([self.current_file_name,
                                    self.current_line_no,
                                    f"Line length is longer than limit. Recommended number of char in line is 120"])
+
+    def validate_bad_practise_naming(self):
+        if "Make fault".lower() in self.current_line.lower():
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   "It's not recommended to use \"Make fault\", use \"Create fault\" instead."])
+
+        if "Generate fault".lower() in self.current_line.lower():
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   "It's not recommended to use \"Generate fault\", use \"Create fault\" instead."])
+
+        if "Initialize module".lower() in self.current_line.lower():
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   "It's not recommended to use \"Initialize module\", use \"Perform initialization steps\" instead."])
+
+        if "Make initialization".lower() in self.current_line.lower():
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   "It's not recommended to use \"Make initialization\", use \"Perform initialization steps\" instead."])
+
+        if "Initial requirements".lower() in self.current_line.lower():
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   "It's not recommended to use \"Initial requirements\", use \"Perform initialization steps\" instead."])
+
+        if "Restart battery".lower() in self.current_line.lower():
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   "It's not recommended to use \"Restart battery\", use \"Cycle power supply\" instead."])
+
+        if "Ignition cycle".lower() in self.current_line.lower():
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   "It's not recommended to use \"Ignition cycle\", use \"Cycle power supply\" instead.", ])
+
+        if "Remove DTC".lower() in self.current_line.lower():
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   "It's not recommended to use \"Remove DTC\", use one of these instead: \"Clear faults\",\"Clear DTCs\",\"Clear fault memory\"."])
+
+        if "Remove faults from memory".lower() in self.current_line.lower():
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   "It's not recommended to use \"Remove faults\", use one of these instead: \"Clear faults\",\"Clear DTCs\",\"Clear fault memory\"."])
+
+        if "Ignition ON".lower() in self.current_line.lower():
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   "It's not recommended to use \"Ignition ON\", use \"Turn ON power supply\" instead."])
+
+        if "battery ON".lower() in self.current_line.lower():
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   "It's not recommended to use \"battery ON\", use \"Turn ON power supply\" instead."])
+
+        if "Ignition OFF".lower() in self.current_line.lower():
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   "It's not recommended to use \"Ignition OFF\", use \"Turn OFF power supply\" instead."])
+
+        if "battery OFF".lower() in self.current_line.lower():
+            self.errorList.append([self.current_file_name,
+                                   self.current_line_no,
+                                   "It's not recommended to use \"battery OFF\", use \"Turn OFF power supply\" instead."])
 
     def validate_verify_coding(self):
         logging.info("Entry")
