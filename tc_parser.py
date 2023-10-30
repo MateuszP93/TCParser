@@ -77,7 +77,7 @@ class App(customtkinter.CTk):
         # "Check imports",
         # "Line length < 200",
         # "While loop",
-
+        # "Bad practise naming",
         # "Tabs not spaces",
         # "General indentation",
         "Update live template"]
@@ -90,13 +90,13 @@ class App(customtkinter.CTk):
         self.title("TC Parser")
         self.geometry(f"{App.WIDTH}x{App.HEIGHT}")
         self.protocol("WM_DELETE_WINDOW", self.on_closing)  # call .on_closing() when app gets closed
-        self.grid_columnconfigure((0, 1), weight=1)
+        self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
         self.bottom_grid_level = customtkinter.CTkFrame(master=self)
-        self.bottom_grid_level.grid(sticky="wesn", padx=10, pady=10)
+        self.bottom_grid_level.grid(row=0, column=0, sticky="wesn", padx=10, pady=10)
         self.bottom_grid_level.grid_columnconfigure(0, weight=1)
-        self.bottom_grid_level.grid_columnconfigure(1, weight=3)
+        self.bottom_grid_level.grid_columnconfigure(1, weight=1)
         self.bottom_grid_level.grid_rowconfigure(0, weight=1)
 
         # =========================== EMPTY LINE ======================
@@ -458,7 +458,7 @@ class App(customtkinter.CTk):
     def validate_spacebars_in_step(self):
         logging.info("Entry")
         time_start = time.time()
-        if "#" not in self.current_line:
+        if not self.current_line.lstrip().startswith("#"):
             if self.new_testcase_version.get():
                 temporary_file = re.search("( *with Step\()([\"\'].*[\"\'])(, ?\d\):|\):)", self.current_line)
             else:
@@ -503,13 +503,13 @@ class App(customtkinter.CTk):
         time_start = time.time()
         line = self.current_line
         try:
-            line = re.sub(r'Log *\( *" *', 'Log("', line, 1)  # delete needless space chars in "Logs  " string
+            line = re.sub(r'Log *\( *" *', 'Log("', line, 1)  # delete needless space chars in "Logs ( " string
             line = re.sub(r' *" *\) *$', '")', line, 1)  # delete needless space chars in " ) " string
             temp_data = re.search("( *Log\() *([\"\'].*[\"\'])(, *\d\)|\))", line)
             if temp_data is not None:
                 temp_data = list(temp_data.groups())
                 temp_data[1] = re.sub(" {2,}", " ", temp_data[1])
-                line = "".join(temp_data + ["\n"])
+                line = "".join(temp_data+["\n"])
                 if self.apply_fix.get():
                     if line != self.current_line:
                         self.current_line = line
@@ -531,7 +531,7 @@ class App(customtkinter.CTk):
     def validate_indentation_level(self):
         logging.info("Entry")
         time_start = time.time()
-        if "#" not in self.current_line:
+        if not self.current_line.lstrip().startswith("#"):
             temporary_file = re.search("( *)(with Step\([\"\'].*[\"\'])(, ?\d\):|\):)", self.current_line)
             temporary_string = ""
             if temporary_file is not None and len(temporary_file.groups()) == 3:
@@ -635,7 +635,7 @@ class App(customtkinter.CTk):
     def validate_dot_on_the_end(self):
         logging.info("Entry")
         time_start = time.time()
-        if "#" not in self.current_line:
+        if not self.current_line.lstrip().startswith("#"):
             temporary_file = re.search("( *.*Step\([\"\'].*\n*.*)(\.)(\".*\))", self.current_line)
             if temporary_file is not None and len(temporary_file.groups()) == 3:
                 temporary_string = ""
@@ -824,15 +824,20 @@ class App(customtkinter.CTk):
                     print(var)
                 except:
                     print("Error: likely json tag issue!")
-
+            no_issue = True
             for key, value in var_dict.items():
                 _key = key.join(["$", "$"])  # add $ to variable name
-                update = update.replace(_key, str(value))  # replace variables with value from <editor-fold> tag
-
-            script = update.join(script.rsplit(to_update, 1))  # Replace last occurrence
+                if _key in update:
+                    update = update.replace(_key, str(value))  # replace variables with value from <editor-fold> tag
+                else:
+                    self.errorList.append([self.current_file_name,
+                                           "",
+                                           f"Not recognized tag variable in live template in '{desc}'"])
+                    no_issue &= False
+            if no_issue:
+                script = update.join(script.rsplit(to_update, 1))  # Replace last occurrence
 
         file.close()
-
         file = open(tc_path, "w")
         file.write(script)
         file.close()
